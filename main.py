@@ -109,6 +109,59 @@ def build_headers(config):
         headers["cookie"] = cookie
     return headers
 
+def validate_auth_config(config):
+    """保存配置时校验 Cookie 与 x-zse-96 是否可用"""
+    cookie = (config.get("cookie") or "").strip()
+    x_zse_96 = (config.get("x_zse_96") or "").strip()
+
+    if not cookie or not x_zse_96:
+        return {
+            "ok": False,
+            "code": "missing_auth",
+            "message": "Cookie 和 x-zse-96 不能为空，请补全后再保存。"
+        }
+
+    articles = get_articles_list()
+    if not articles:
+        return {
+            "ok": True,
+            "code": "skipped_no_article",
+            "message": "当前没有监控文章，已保存配置，但暂时无法自动校验 Cookie / x-zse-96。"
+        }
+
+    test_token = articles[0]["token"]
+    end_date = datetime.now().strftime("%Y-%m-%d")
+    test_url = f"https://www.zhihu.com/api/v4/creators/analysis/realtime/content/aggr?type=answer&token={test_token}&end={end_date}"
+
+    try:
+        resp = http_requests.get(test_url, headers=build_headers(config), timeout=12)
+    except Exception as e:
+        return {
+            "ok": False,
+            "code": "network_error",
+            "message": f"自动校验失败：{type(e).__name__}，请稍后重试。"
+        }
+
+    if resp.status_code == 200:
+        return {
+            "ok": True,
+            "code": "ok",
+            "message": "Cookie 和 x-zse-96 校验通过。"
+        }
+
+    if resp.status_code in (401, 403):
+        return {
+            "ok": False,
+            "code": "unauthorized",
+            "message": f"Cookie 或 x-zse-96 可能无效（HTTP {resp.status_code}）。"
+        }
+
+    return {
+        "ok": False,
+        "code": "request_failed",
+        "message": f"自动校验失败，知乎接口返回 HTTP {resp.status_code}。"
+    }
+
 def fetch_single_article(token, title, headers):
     """抓取单篇文章数据并入库"""
     end_date = datetime.now().strftime("%Y-%m-%d")
@@ -429,13 +482,21 @@ def api_config_get():
 @app.route("/api/config", methods=["PUT"])
 def api_config_update():
     """更新系统配置"""
-    data = request.get_json()
+    data = request.get_json() or {}
+    merged_config = get_config_dict()
+    for key, value in data.items():
+        merged_config[key] = str(value)
+
+    validation = validate_auth_config(merged_config)
+    if not validation.get("ok") and validation.get("code") in ("missing_auth", "unauthorized"):
+        return jsonify({"error": validation.get("message"), "validation": validation}), 400
+
     conn = get_db()
     for key, value in data.items():
         conn.execute("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)", (key, str(value)))
     conn.commit()
     conn.close()
-    return jsonify({"message": "配置已更新"})
+    return jsonify({"message": "配置已更新", "validation": validation})
 
 # ============================================================
 # 从旧 config.json 迁移数据
@@ -489,7 +550,7 @@ def migrate_from_config_json():
 def main():
     print("=============================================")
     print("  知乎数据监控工具 v2.0 (Web 版)")
-    print("  访问 http://localhost:5000 打开控制面板")
+    print("  访问 http://localhost:5050 打开控制面板")
     print("=============================================\n")
 
     init_db()
@@ -500,10 +561,10 @@ def main():
     scheduler_thread.start()
 
     # 自动打开浏览器
-    webbrowser.open("http://localhost:5000")
+    webbrowser.open("http://localhost:5050")
 
     # 启动 Flask
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=5050, debug=False)
 
 if __name__ == "__main__":
     main()

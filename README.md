@@ -47,7 +47,7 @@ pip install flask requests
 python main.py
 ```
 
-浏览器会自动打开 `http://localhost:5000`。
+浏览器会自动打开 `http://localhost:5050`。
 
 ### 3. 配置
 
