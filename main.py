@@ -1,4 +1,6 @@
+import os
 import sqlite3
+import sys
 import webbrowser
 from datetime import datetime
 
@@ -6,11 +8,30 @@ from flask import Flask, jsonify, render_template, request
 
 from app import repos, services
 
+
+def get_resource_path(relative_path: str) -> str:
+    """获取资源路径，兼容 PyInstaller 打包后的环境"""
+    if hasattr(sys, "_MEIPASS"):
+        return os.path.join(sys._MEIPASS, relative_path)
+    return os.path.join(os.path.abspath("."), relative_path)
+
+
+def get_exe_dir() -> str:
+    """获取可执行文件所在目录（打包后为 exe 目录，开发时为项目目录）"""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.abspath(".")
+
+
 HOST = "0.0.0.0"
 PORT = 5050
 LOCAL_URL = f"http://localhost:{PORT}"
 
-app = Flask(__name__, template_folder="templates", static_folder="static")
+app = Flask(
+    __name__,
+    template_folder=get_resource_path("templates"),
+    static_folder=get_resource_path("static"),
+)
 
 
 @app.route("/")

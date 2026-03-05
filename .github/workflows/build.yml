@@ -1,0 +1,72 @@
+name: 打包发布
+
+# 推送 tag 时触发（例如 git tag v1.0.0 && git push --tags）
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact_name: zhihu-data.exe
+            asset_name: zhihu-data-windows.exe
+          - os: macos-latest
+            artifact_name: zhihu-data
+            asset_name: zhihu-data-macos
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 安装依赖
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: PyInstaller 打包 (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          pyinstaller --onefile --add-data "templates;templates" --add-data "static;static" --name zhihu-data main.py
+
+      - name: PyInstaller 打包 (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          pyinstaller --onefile --add-data "templates:templates" --add-data "static:static" --name zhihu-data main.py
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset_name }}
+          path: dist/${{ matrix.artifact_name }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 下载所有构建产物
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: 创建 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/zhihu-data-windows.exe/zhihu-data.exe
+            artifacts/zhihu-data-macos/zhihu-data
+          generate_release_notes: true

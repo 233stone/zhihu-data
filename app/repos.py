@@ -1,10 +1,19 @@
 import json
 import os
 import sqlite3
+import sys
 from datetime import datetime
 from typing import Any
 
-DB_PATH = "zhihu_data.db"
+
+def _get_data_dir() -> str:
+    """获取数据目录：打包后为 exe 所在目录，开发时为项目目录"""
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.abspath(".")
+
+
+DB_PATH = os.path.join(_get_data_dir(), "zhihu_data.db")
 
 DEFAULT_CONFIG = {
     "interval_minutes": "10",
@@ -79,8 +88,10 @@ def init_db() -> None:
     conn.close()
 
 
-def migrate_from_config_json(config_path: str = "config.json") -> None:
+def migrate_from_config_json(config_path: str = "") -> None:
     """如果存在旧的 config.json，自动导入其数据到数据库"""
+    if not config_path:
+        config_path = os.path.join(_get_data_dir(), "config.json")
     if not os.path.exists(config_path):
         return
 

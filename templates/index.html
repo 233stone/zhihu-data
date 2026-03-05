@@ -55,7 +55,8 @@
 
             <!-- 时间筛选 -->
             <div class="time-filters">
-                <button class="time-filter-btn active" data-days="1" data-label="今天" onclick="filterTime(this, 1)">今天</button>
+                <button class="time-filter-btn active" data-days="1" data-label="今天"
+                    onclick="filterTime(this, 1)">今天</button>
                 <button class="time-filter-btn" data-days="7" data-label="最近7天" onclick="filterTime(this, 7)">最近
                     7 天</button>
                 <button class="time-filter-btn" data-days="14" data-label="最近14天" onclick="filterTime(this, 14)">最近 14
@@ -123,8 +124,7 @@
                 <h3 style="margin-top:0; margin-bottom: 16px;">添加新文章监控</h3>
                 <div style="display: flex; gap: 16px;">
                     <div style="flex: 2;">
-                        <input type="text" id="add-url" class="form-control"
-                            placeholder="粘贴回答链接或分享文本（支持标题+链接）">
+                        <input type="text" id="add-url" class="form-control" placeholder="粘贴回答链接或分享文本（支持标题+链接）">
                     </div>
                     <div style="flex: 1;">
                         <input type="text" id="add-title" class="form-control" placeholder="标题（可选，留空自动获取）">
@@ -139,6 +139,7 @@
                     <thead>
                         <tr>
                             <th>文章信息</th>
+                            <th onclick="sortTable('today_show')" data-sort="today_show">展现量</th>
                             <th onclick="sortTable('today_pv')" data-sort="today_pv">阅读量</th>
                             <th onclick="sortTable('click_rate')" data-sort="click_rate">点击率</th>
                             <th onclick="sortTable('finish_read_percent')" data-sort="finish_read_percent">完读率</th>
@@ -160,8 +161,8 @@
                 <h1 class="page-title">核心抓取配置</h1>
                 <button class="btn" onclick="saveConfig()">保存配置</button>
             </div>
-            <div id="config-validate-result"
-                style="margin-bottom: 12px; font-size: 13px; color: var(--text-muted);"></div>
+            <div id="config-validate-result" style="margin-bottom: 12px; font-size: 13px; color: var(--text-muted);">
+            </div>
 
             <div class="card" style="max-width: 800px;">
                 <div class="form-group">
