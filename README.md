@@ -64,11 +64,17 @@ python main.py
 
 ```
 zhihu-data/
-├── main.py              # 后端：Flask 路由 + 定时抓取
+├── app/
+│   ├── repos.py           # 数据访问与 SQL
+│   └── services.py        # 业务逻辑（抓取/校验/调度/统计）
+├── static/
+│   ├── css/app.css        # 前端样式
+│   └── js/app.js          # 前端交互逻辑
 ├── templates/
-│   └── index.html        # 前端：三栏布局 SPA
-├── zhihu_data.db         # SQLite 数据库（自动创建）
-└── README.md
+│   └── index.html         # 前端结构模板
+├── main.py                # Flask 路由与启动入口
+├── zhihu_data.db          # SQLite 数据库（自动创建）
+└── docs/refactor_report.md
 ```
 
 ## API
