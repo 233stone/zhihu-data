@@ -310,7 +310,7 @@ def get_trend_rows(days: int, token: str = "") -> list[dict[str, Any]]:
         raw_limit = limit * 20
         rows = conn.execute(
             """
-            SELECT fetch_time, today_date, today_pv, today_upvote, today_collect, today_share, today_show
+            SELECT fetch_time, token, today_date, today_pv, today_upvote, today_collect, today_share, today_show
             FROM article_stats
             ORDER BY fetch_time DESC
             LIMIT ?
@@ -319,7 +319,8 @@ def get_trend_rows(days: int, token: str = "") -> list[dict[str, Any]]:
         ).fetchall()
         conn.close()
 
-        bucketed: dict[str, dict[str, Any]] = {}
+        # 同一时间桶内，同一篇文章只取最新一条，避免重启/手动刷新导致重复累计
+        latest_per_bucket_token: dict[tuple[str, str], dict[str, Any]] = {}
         for row in rows:
             try:
                 fetch_dt = datetime.strptime(row["fetch_time"], "%Y-%m-%d %H:%M:%S")
@@ -329,7 +330,24 @@ def get_trend_rows(days: int, token: str = "") -> list[dict[str, Any]]:
             bucket_minute = (fetch_dt.minute // bucket_minutes) * bucket_minutes
             bucket_dt = fetch_dt.replace(minute=bucket_minute, second=0, microsecond=0)
             bucket_key = bucket_dt.strftime("%Y-%m-%d %H:%M")
+            dedup_key = (bucket_key, row["token"] or "")
 
+            # rows 已按 fetch_time DESC，首次命中即最新值
+            if dedup_key in latest_per_bucket_token:
+                continue
+            latest_per_bucket_token[dedup_key] = {
+                "fetch_time": bucket_key,
+                "today_date": row["today_date"],
+                "today_pv": row["today_pv"] or 0,
+                "today_upvote": row["today_upvote"] or 0,
+                "today_collect": row["today_collect"] or 0,
+                "today_share": row["today_share"] or 0,
+                "today_show": row["today_show"] or 0,
+            }
+
+        bucketed: dict[str, dict[str, Any]] = {}
+        for row in latest_per_bucket_token.values():
+            bucket_key = row["fetch_time"]
             if bucket_key not in bucketed:
                 bucketed[bucket_key] = {
                     "fetch_time": bucket_key,
@@ -340,12 +358,11 @@ def get_trend_rows(days: int, token: str = "") -> list[dict[str, Any]]:
                     "today_share": 0,
                     "today_show": 0,
                 }
-
-            bucketed[bucket_key]["today_pv"] += row["today_pv"] or 0
-            bucketed[bucket_key]["today_upvote"] += row["today_upvote"] or 0
-            bucketed[bucket_key]["today_collect"] += row["today_collect"] or 0
-            bucketed[bucket_key]["today_share"] += row["today_share"] or 0
-            bucketed[bucket_key]["today_show"] += row["today_show"] or 0
+            bucketed[bucket_key]["today_pv"] += row["today_pv"]
+            bucketed[bucket_key]["today_upvote"] += row["today_upvote"]
+            bucketed[bucket_key]["today_collect"] += row["today_collect"]
+            bucketed[bucket_key]["today_share"] += row["today_share"]
+            bucketed[bucket_key]["today_show"] += row["today_show"]
 
         result = sorted(bucketed.values(), key=lambda item: item["fetch_time"])
         if len(result) > limit:
