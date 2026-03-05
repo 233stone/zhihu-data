@@ -55,8 +55,8 @@
 
             <!-- 时间筛选 -->
             <div class="time-filters">
-                <button class="time-filter-btn" data-days="0" data-label="今天" onclick="filterTime(this, 1)">今天</button>
-                <button class="time-filter-btn active" data-days="7" data-label="最近7天" onclick="filterTime(this, 7)">最近
+                <button class="time-filter-btn active" data-days="1" data-label="今天" onclick="filterTime(this, 1)">今天</button>
+                <button class="time-filter-btn" data-days="7" data-label="最近7天" onclick="filterTime(this, 7)">最近
                     7 天</button>
                 <button class="time-filter-btn" data-days="14" data-label="最近14天" onclick="filterTime(this, 14)">最近 14
                     天</button>
@@ -70,33 +70,30 @@
                 <div class="card">
                     <div class="card-title">阅读总量 ⏱</div>
                     <div class="card-value" id="card-pv">--</div>
-                    <div class="card-trend">今日 <span class="trend-up">↑ <span id="trend-pv">--</span></span></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">点击率 ⚡</div>
+                    <div class="card-value" id="card-clickrate">--</div>
+                </div>
+                <div class="card">
+                    <div class="card-title">平均完读率 📖</div>
+                    <div class="card-value" id="card-finish">--</div>
                 </div>
                 <div class="card">
                     <div class="card-title">赞同总量 👍</div>
                     <div class="card-value" id="card-upvote">--</div>
-                    <div class="card-trend">今日 <span class="trend-up">↑ <span id="trend-upvote">--</span></span></div>
-                </div>
-                <div class="card">
-                    <div class="card-title">评论总量 💬</div>
-                    <div class="card-value" id="card-comment">--</div>
-                    <div class="card-trend">今日 <span class="trend-up">↑ <span id="trend-comment">--</span></span></div>
                 </div>
                 <div class="card">
                     <div class="card-title">收藏总量 ⭐</div>
                     <div class="card-value" id="card-collect">--</div>
-                    <div class="card-trend">今日 <span class="trend-up">↑ <span id="trend-collect">--</span></span></div>
+                </div>
+                <div class="card">
+                    <div class="card-title">评论总量 💬</div>
+                    <div class="card-value" id="card-comment">--</div>
                 </div>
                 <div class="card">
                     <div class="card-title">分享总量 🔗</div>
                     <div class="card-value" id="card-share">--</div>
-                    <div class="card-trend">今日 <span class="trend-up">↑ <span id="trend-share">--</span></span></div>
-                </div>
-                <div class="card" style="border-left: 3px solid var(--success-color);">
-                    <div class="card-title">平均完读率 📖</div>
-                    <div class="card-value" id="card-finish">--</div>
-                    <div class="card-trend">点击率: <span id="card-clickrate"
-                            style="color:var(--text-main);font-weight:500;">--</span></div>
                 </div>
             </div>
 
@@ -104,7 +101,7 @@
             <div class="chart-container">
                 <div class="chart-header">
                     <h3 style="margin:0; font-size: 16px; font-weight: 500;">趋势分析 (<span
-                            id="chart-title-days">最近7天</span>)</h3>
+                            id="chart-title-days">今天</span>)</h3>
                     <div class="chart-actions">
                         <button class="active" onclick="switchChartMetric('pv', this)">阅读</button>
                         <button onclick="switchChartMetric('upvote', this)">点赞</button>
@@ -127,7 +124,7 @@
                 <div style="display: flex; gap: 16px;">
                     <div style="flex: 2;">
                         <input type="text" id="add-url" class="form-control"
-                            placeholder="粘贴知乎回答链接，例如：https://www.zhihu.com/question/.../answer/...">
+                            placeholder="粘贴回答链接或分享文本（支持标题+链接）">
                     </div>
                     <div style="flex: 1;">
                         <input type="text" id="add-title" class="form-control" placeholder="标题（可选，留空自动获取）">

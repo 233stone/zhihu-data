@@ -1,6 +1,7 @@
 import threading
 import time
 from datetime import datetime
+import re
 from typing import Any
 
 import requests as http_requests
@@ -8,6 +9,37 @@ import requests as http_requests
 from app import repos
 
 ZHIHU_AGGR_API = "https://www.zhihu.com/api/v4/creators/analysis/realtime/content/aggr"
+
+
+def parse_article_input(raw_text: str) -> tuple[str | None, str | None]:
+    """解析粘贴内容（支持纯链接、标题+链接分享文本）"""
+    text = (raw_text or "").strip()
+    if not text:
+        return None, None
+
+    url_match = re.search(r"https?://[^\s]+", text)
+    url = url_match.group(0).strip("；;，,。") if url_match else ""
+
+    token_match = re.search(r"/answer/(\d+)", url) if url else None
+    if not token_match:
+        token_match = re.search(r"/answer/(\d+)", text)
+    if token_match:
+        token = token_match.group(1)
+    elif re.fullmatch(r"\d{6,}", text):
+        token = text
+    else:
+        token = None
+
+    title = None
+    first_line = next((line.strip() for line in text.splitlines() if line.strip()), "")
+    if first_line and not first_line.startswith("http") and not re.fullmatch(r"\d{6,}", first_line):
+        title = re.split(r"\s+-\s+", first_line, maxsplit=1)[0].strip()
+        if title and len(title) > 2:
+            title = title.strip("；;，,。")
+        else:
+            title = None
+
+    return token, title
 
 
 def build_headers(config: dict[str, str]) -> dict[str, str]:

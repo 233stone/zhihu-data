@@ -205,7 +205,7 @@
         .summary-cards {
             display: flex;
             flex-wrap: nowrap;
-            gap: 20px;
+            gap: 14px;
             margin-bottom: 30px;
             overflow-x: auto;
             padding-bottom: 4px;
@@ -214,41 +214,30 @@
         .card {
             background: var(--card-bg);
             border-radius: 8px;
-            padding: 20px;
+            padding: 14px 16px;
             box-shadow: 0 1px 3px rgba(18, 18, 18, .1);
             border: 1px solid var(--border-color);
             display: flex;
             flex-direction: column;
-            min-width: 220px;
-            flex: 1 0 220px;
+            min-width: 170px;
+            flex: 1 0 170px;
         }
 
         .card-title {
-            font-size: 14px;
+            font-size: 13px;
             color: var(--text-muted);
-            margin-bottom: 8px;
+            margin-bottom: 6px;
             display: flex;
             align-items: center;
             white-space: nowrap;
         }
 
         .card-value {
-            font-size: 28px;
+            font-size: 22px;
             font-weight: 600;
             color: var(--text-main);
-            margin-bottom: 8px;
+            margin-bottom: 0;
             white-space: nowrap;
-        }
-
-        .card-trend {
-            font-size: 13px;
-            color: var(--text-muted);
-            white-space: nowrap;
-        }
-
-        .trend-up {
-            color: var(--success-color);
-            font-weight: 500;
         }
 
         /* ---------------- 数据看板：折线图 ---------------- */

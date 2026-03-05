@@ -1,6 +1,7 @@
 import json
 import os
 import sqlite3
+from datetime import datetime
 from typing import Any
 
 DB_PATH = "zhihu_data.db"
@@ -292,22 +293,61 @@ def get_trend_rows(days: int, token: str = "") -> list[dict[str, Any]]:
             """,
             (token, limit),
         ).fetchall()
+        conn.close()
+        result = [dict(row) for row in rows]
+        result.reverse()
+        return result
     else:
+        interval_row = conn.execute(
+            "SELECT value FROM config WHERE key = 'interval_minutes'"
+        ).fetchone()
+        try:
+            bucket_minutes = int((interval_row["value"] if interval_row else "10") or 10)
+        except ValueError:
+            bucket_minutes = 10
+        bucket_minutes = max(1, min(60, bucket_minutes))
+
+        raw_limit = limit * 20
         rows = conn.execute(
             """
-            SELECT fetch_time, today_date,
-                   SUM(today_pv) as today_pv, SUM(today_upvote) as today_upvote,
-                   SUM(today_collect) as today_collect, SUM(today_share) as today_share,
-                   SUM(today_show) as today_show
+            SELECT fetch_time, today_date, today_pv, today_upvote, today_collect, today_share, today_show
             FROM article_stats
-            GROUP BY fetch_time
             ORDER BY fetch_time DESC
             LIMIT ?
             """,
-            (limit,),
+            (raw_limit,),
         ).fetchall()
+        conn.close()
 
-    conn.close()
-    result = [dict(row) for row in rows]
-    result.reverse()
-    return result
+        bucketed: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            try:
+                fetch_dt = datetime.strptime(row["fetch_time"], "%Y-%m-%d %H:%M:%S")
+            except (TypeError, ValueError):
+                continue
+
+            bucket_minute = (fetch_dt.minute // bucket_minutes) * bucket_minutes
+            bucket_dt = fetch_dt.replace(minute=bucket_minute, second=0, microsecond=0)
+            bucket_key = bucket_dt.strftime("%Y-%m-%d %H:%M")
+
+            if bucket_key not in bucketed:
+                bucketed[bucket_key] = {
+                    "fetch_time": bucket_key,
+                    "today_date": row["today_date"],
+                    "today_pv": 0,
+                    "today_upvote": 0,
+                    "today_collect": 0,
+                    "today_share": 0,
+                    "today_show": 0,
+                }
+
+            bucketed[bucket_key]["today_pv"] += row["today_pv"] or 0
+            bucketed[bucket_key]["today_upvote"] += row["today_upvote"] or 0
+            bucketed[bucket_key]["today_collect"] += row["today_collect"] or 0
+            bucketed[bucket_key]["today_share"] += row["today_share"] or 0
+            bucketed[bucket_key]["today_show"] += row["today_show"] or 0
+
+        result = sorted(bucketed.values(), key=lambda item: item["fetch_time"])
+        if len(result) > limit:
+            result = result[-limit:]
+        return result

@@ -1,4 +1,3 @@
-import re
 import sqlite3
 import webbrowser
 from datetime import datetime
@@ -55,18 +54,19 @@ def api_articles_list():
 def api_articles_add():
     """添加文章（支持通过链接自动解析 token）"""
     data = request.get_json() or {}
-    url = (data.get("url") or "").strip()
+    raw_input = (data.get("url") or "").strip()
     title = (data.get("title") or "").strip()
     token = (data.get("token") or "").strip()
 
-    if url:
-        match = re.search(r"/answer/(\d+)", url)
-        if not match:
-            return jsonify({"error": "无法从链接中解析 answer ID，请检查链接格式"}), 400
-        token = match.group(1)
+    if raw_input:
+        parsed_token, parsed_title = services.parse_article_input(raw_input)
+        if not token and parsed_token:
+            token = parsed_token
+        if not title and parsed_title:
+            title = parsed_title
 
     if not token:
-        return jsonify({"error": "请提供知乎回答链接或 token"}), 400
+        return jsonify({"error": "无法解析回答 ID，请粘贴知乎回答链接或分享文本"}), 400
 
     if not title:
         config = repos.get_config_dict()

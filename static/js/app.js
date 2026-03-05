@@ -34,7 +34,7 @@
         }
 
         // ---------------- 全局变量 ----------------
-        let currentDays = 7;
+        let currentDays = 1;
         let currentMetric = 'pv';
         let currentArticleToken = '';  // 空字符串 = 总览
         let chartInstance = null;
@@ -54,6 +54,23 @@
         function parsePercent(str) {
             if (!str) return 0;
             return parseFloat(str.replace('%', ''));
+        }
+
+        function getLocalDateStr(dateObj = new Date()) {
+            const y = dateObj.getFullYear();
+            const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const d = String(dateObj.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        function setTimeFilterState(days) {
+            const targetBtn = Array.from(document.querySelectorAll('.time-filter-btn'))
+                .find(btn => Number(btn.getAttribute('data-days')) === Number(days));
+            if (!targetBtn) return;
+            document.querySelectorAll('.time-filter-btn').forEach(btn => btn.classList.remove('active'));
+            targetBtn.classList.add('active');
+            currentDays = Number(days);
+            document.getElementById('chart-title-days').innerText = targetBtn.getAttribute('data-label') || '';
         }
 
         // ---------------- 二级文章导航（独立侧边栏） ----------------
@@ -107,6 +124,8 @@
             const titleEl = document.querySelector('.page-title');
             if (token) {
                 titleEl.innerText = elem.title || elem.innerText;
+                // 切换到单篇时，默认展示今天
+                setTimeFilterState(1);
             } else {
                 titleEl.innerText = '整体数据总览';
             }
@@ -138,10 +157,7 @@
 
         // ---------------- [模块1] 数据看板 ----------------
         function filterTime(btnElem, days) {
-            document.querySelectorAll('.time-filter-btn').forEach(btn => btn.classList.remove('active'));
-            btnElem.classList.add('active');
-            currentDays = days;
-            document.getElementById('chart-title-days').innerText = btnElem.getAttribute('data-label');
+            setTimeFilterState(days);
             loadDashboard();
         }
 
@@ -154,7 +170,7 @@
 
         async function loadDashboard() {
             try {
-                const dateStr = new Date().toISOString().split('T')[0];
+                const dateStr = getLocalDateStr();
                 const tokenParam = currentArticleToken ? `&token=${currentArticleToken}` : '';
 
                 // 获取总览/单篇文章的汇总数据
@@ -175,17 +191,6 @@
                 const trendRes = await fetch(`/api/stats/trend?days=${currentDays}${trendTokenParam}`);
                 window.trendDataRaw = await trendRes.json();
 
-                // 计算增量（取最近两条的差值）
-                if (window.trendDataRaw && window.trendDataRaw.length >= 2) {
-                    const latest = window.trendDataRaw[window.trendDataRaw.length - 1];
-                    const prev = window.trendDataRaw[window.trendDataRaw.length - 2];
-                    document.getElementById('trend-pv').innerText = Math.max(0, latest.today_pv - prev.today_pv).toLocaleString();
-                    document.getElementById('trend-upvote').innerText = Math.max(0, latest.today_upvote - prev.today_upvote).toLocaleString();
-                    document.getElementById('trend-comment').innerText = 0;
-                    document.getElementById('trend-collect').innerText = Math.max(0, latest.today_collect - prev.today_collect).toLocaleString();
-                    document.getElementById('trend-share').innerText = Math.max(0, latest.today_share - prev.today_share).toLocaleString();
-                }
-
                 renderChart();
             } catch (e) {
                 console.error('加载面板失败', e);
@@ -200,7 +205,7 @@
 
             if (currentDays === 1) {
                 // 「今天」模式：展示日内每次抓取的时间序列，X 轴为 HH:mm
-                const todayStr = new Date().toISOString().split('T')[0];
+                const todayStr = getLocalDateStr();
                 const todayData = window.trendDataRaw.filter(item => {
                     // fetch_time 格式为 "YYYY-MM-DD HH:MM:SS"
                     return item.fetch_time && item.fetch_time.startsWith(todayStr);
@@ -436,4 +441,3 @@
                 resultEl.style.color = '#f1403c';
             }
         }
-
