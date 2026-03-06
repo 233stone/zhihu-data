@@ -6,8 +6,8 @@
 
 | 操作系统 | 下载链接 | 说明 |
 | :---: | :--- | :--- |
-| **🪟 Windows** | [点击下载最新 Windows 版 (exe) ⬇️](https://github.com/233stone/zhihu-data/releases/latest) | 推荐 Windows 10/11 用户使用，双击直接运行 |
-| **🍎 macOS** | [点击下载最新 macOS 版 (终端程序) ⬇️](https://github.com/233stone/zhihu-data/releases/latest) | 支持 Intel 与 Apple Silicon 芯片 (M1/M2/M3) |
+| **🪟 Windows** | [点击下载最新 Windows 版 (exe) ⬇️](https://github.com/233stone/zhihu-data/releases/latest/download/zhihu-data.exe) | 推荐 Windows 10/11 用户使用，双击直接运行 |
+| **🍎 macOS** | [点击下载最新 macOS 版 (终端程序) ⬇️](https://github.com/233stone/zhihu-data/releases/latest/download/zhihu-data) | 支持 Intel 与 Apple Silicon 芯片 (M1/M2/M3) |
 
 > 💡 **提示**：如果是第一次使用，请直接下载上方的打包版本，**无需配置 Python 环境**，开箱即用体验更好！
 
