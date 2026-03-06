@@ -100,13 +100,7 @@ function renderArticleList(articles) {
         }
         item.dataset.token = article.token;
         item.title = article.title;
-        const link = document.createElement('a');
-        link.href = `https://www.zhihu.com/answer/${article.token}`;
-        link.target = '_blank';
-        link.innerText = article.title;
-        link.style.cssText = 'color:inherit;text-decoration:none;display:block;';
-        link.onclick = function (e) { e.stopPropagation(); };
-        item.appendChild(link);
+        item.innerText = article.title;
         item.onclick = function () { switchArticle(article.token, this); };
         container.appendChild(item);
     });
