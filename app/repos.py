@@ -60,6 +60,26 @@ def init_db() -> None:
 
     cursor.execute(
         """
+        CREATE TABLE IF NOT EXISTS article_total_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            fetch_time DATETIME,
+            token TEXT,
+            title TEXT,
+            total_pv INTEGER,
+            total_show INTEGER,
+            total_upvote INTEGER,
+            total_comment INTEGER,
+            total_collect INTEGER,
+            total_share INTEGER,
+            finish_read_percent TEXT,
+            positive_interact_percent TEXT,
+            follower_translate INTEGER
+        )
+        """
+    )
+
+    cursor.execute(
+        """
         CREATE TABLE IF NOT EXISTS articles (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             token TEXT UNIQUE,
@@ -187,19 +207,58 @@ def list_articles_with_latest_stats() -> list[dict[str, Any]]:
     conn = get_db_connection()
     rows = conn.execute(
         """
-        SELECT a.token, a.title,
-               s.today_pv, s.today_show, s.today_upvote, s.today_comment,
-               s.today_collect, s.today_share, s.finish_read_percent,
-               s.positive_interact_percent, s.fetch_time
-        FROM articles a
-        LEFT JOIN (
+        WITH latest_daily_stats AS (
             SELECT st.* FROM article_stats st
             INNER JOIN (
                 SELECT token, MAX(fetch_time) as max_time
                 FROM article_stats
                 GROUP BY token
             ) latest ON st.token = latest.token AND st.fetch_time = latest.max_time
-        ) s ON a.token = s.token
+        ),
+        latest_total_stats AS (
+            SELECT st.* FROM article_total_stats st
+            INNER JOIN (
+                SELECT token, MAX(fetch_time) as max_time
+                FROM article_total_stats
+                GROUP BY token
+            ) latest ON st.token = latest.token AND st.fetch_time = latest.max_time
+        ),
+        latest_daily_per_date AS (
+            SELECT st.* FROM article_stats st
+            INNER JOIN (
+                SELECT token, today_date, MAX(fetch_time) as max_time
+                FROM article_stats
+                WHERE today_date <> ''
+                GROUP BY token, today_date
+            ) latest ON st.token = latest.token
+                AND st.today_date = latest.today_date
+                AND st.fetch_time = latest.max_time
+        ),
+        fallback_total_stats AS (
+            SELECT token,
+                   SUM(today_pv) AS total_pv,
+                   SUM(today_show) AS total_show,
+                   SUM(today_upvote) AS total_upvote,
+                   SUM(today_comment) AS total_comment,
+                   SUM(today_collect) AS total_collect,
+                   SUM(today_share) AS total_share
+            FROM latest_daily_per_date
+            GROUP BY token
+        )
+        SELECT a.token, a.title,
+               COALESCE(t.total_pv, f.total_pv, d.today_pv, 0) AS total_pv,
+               COALESCE(t.total_show, f.total_show, d.today_show, 0) AS total_show,
+               COALESCE(t.total_upvote, f.total_upvote, d.today_upvote, 0) AS total_upvote,
+               COALESCE(t.total_comment, f.total_comment, d.today_comment, 0) AS total_comment,
+               COALESCE(t.total_collect, f.total_collect, d.today_collect, 0) AS total_collect,
+               COALESCE(t.total_share, f.total_share, d.today_share, 0) AS total_share,
+               COALESCE(t.finish_read_percent, d.finish_read_percent, '') AS finish_read_percent,
+               COALESCE(t.positive_interact_percent, d.positive_interact_percent, '') AS positive_interact_percent,
+               COALESCE(t.fetch_time, d.fetch_time) AS fetch_time
+        FROM articles a
+        LEFT JOIN latest_daily_stats d ON a.token = d.token
+        LEFT JOIN latest_total_stats t ON a.token = t.token
+        LEFT JOIN fallback_total_stats f ON a.token = f.token
         ORDER BY a.created_at DESC
         """
     ).fetchall()
@@ -230,6 +289,35 @@ def insert_article_stats(record: dict[str, Any]) -> None:
             record.get("today_share"),
             record.get("today_incr_upvote"),
             record.get("today_desc_upvote"),
+            record.get("finish_read_percent"),
+            record.get("positive_interact_percent"),
+            record.get("follower_translate"),
+        ),
+    )
+    conn.commit()
+    conn.close()
+
+
+def insert_article_total_stats(record: dict[str, Any]) -> None:
+    conn = get_db_connection()
+    conn.execute(
+        """
+        INSERT INTO article_total_stats (
+            fetch_time, token, title,
+            total_pv, total_show, total_upvote, total_comment, total_collect, total_share,
+            finish_read_percent, positive_interact_percent, follower_translate
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            record.get("fetch_time"),
+            record.get("token"),
+            record.get("title"),
+            record.get("total_pv"),
+            record.get("total_show"),
+            record.get("total_upvote"),
+            record.get("total_comment"),
+            record.get("total_collect"),
+            record.get("total_share"),
             record.get("finish_read_percent"),
             record.get("positive_interact_percent"),
             record.get("follower_translate"),
@@ -308,74 +396,103 @@ def get_trend_rows(days: int, token: str = "") -> list[dict[str, Any]]:
         result = [dict(row) for row in rows]
         result.reverse()
         return result
-    else:
-        interval_row = conn.execute(
-            "SELECT value FROM config WHERE key = 'interval_minutes'"
-        ).fetchone()
+
+    interval_row = conn.execute(
+        "SELECT value FROM config WHERE key = 'interval_minutes'"
+    ).fetchone()
+    try:
+        bucket_minutes = int((interval_row["value"] if interval_row else "10") or 10)
+    except ValueError:
+        bucket_minutes = 10
+    bucket_minutes = max(1, min(60, bucket_minutes))
+
+    raw_limit = limit * 20
+    rows = conn.execute(
+        """
+        SELECT fetch_time, token, today_date, today_pv, today_upvote, today_collect, today_share, today_show
+        FROM article_stats
+        ORDER BY fetch_time DESC
+        LIMIT ?
+        """,
+        (raw_limit,),
+    ).fetchall()
+    conn.close()
+
+    # Keep only the newest fetch for each article within each time bucket.
+    latest_per_bucket_token: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in rows:
         try:
-            bucket_minutes = int((interval_row["value"] if interval_row else "10") or 10)
-        except ValueError:
-            bucket_minutes = 10
-        bucket_minutes = max(1, min(60, bucket_minutes))
+            fetch_dt = datetime.strptime(row["fetch_time"], "%Y-%m-%d %H:%M:%S")
+        except (TypeError, ValueError):
+            continue
 
-        raw_limit = limit * 20
-        rows = conn.execute(
-            """
-            SELECT fetch_time, token, today_date, today_pv, today_upvote, today_collect, today_share, today_show
-            FROM article_stats
-            ORDER BY fetch_time DESC
-            LIMIT ?
-            """,
-            (raw_limit,),
-        ).fetchall()
-        conn.close()
+        bucket_minute = (fetch_dt.minute // bucket_minutes) * bucket_minutes
+        bucket_dt = fetch_dt.replace(minute=bucket_minute, second=0, microsecond=0)
+        bucket_key = bucket_dt.strftime("%Y-%m-%d %H:%M")
+        token_key = row["token"] or ""
+        dedup_key = (bucket_key, token_key)
 
-        # 同一时间桶内，同一篇文章只取最新一条，避免重启/手动刷新导致重复累计
-        latest_per_bucket_token: dict[tuple[str, str], dict[str, Any]] = {}
-        for row in rows:
-            try:
-                fetch_dt = datetime.strptime(row["fetch_time"], "%Y-%m-%d %H:%M:%S")
-            except (TypeError, ValueError):
+        if dedup_key in latest_per_bucket_token:
+            continue
+
+        latest_per_bucket_token[dedup_key] = {
+            "token": token_key,
+            "fetch_time": bucket_key,
+            "today_date": row["today_date"] or bucket_key.split(" ")[0],
+            "today_pv": row["today_pv"] or 0,
+            "today_upvote": row["today_upvote"] or 0,
+            "today_collect": row["today_collect"] or 0,
+            "today_share": row["today_share"] or 0,
+            "today_show": row["today_show"] or 0,
+        }
+
+    rows_by_bucket: dict[str, list[dict[str, Any]]] = {}
+    for row in latest_per_bucket_token.values():
+        rows_by_bucket.setdefault(row["fetch_time"], []).append(row)
+
+    result: list[dict[str, Any]] = []
+    last_seen_by_token: dict[str, dict[str, Any]] = {}
+    current_date = ""
+
+    for bucket_key in sorted(rows_by_bucket.keys()):
+        bucket_date = bucket_key.split(" ")[0]
+        if bucket_date != current_date:
+            current_date = bucket_date
+            last_seen_by_token = {}
+
+        for row in rows_by_bucket[bucket_key]:
+            if not row["token"]:
                 continue
-
-            bucket_minute = (fetch_dt.minute // bucket_minutes) * bucket_minutes
-            bucket_dt = fetch_dt.replace(minute=bucket_minute, second=0, microsecond=0)
-            bucket_key = bucket_dt.strftime("%Y-%m-%d %H:%M")
-            dedup_key = (bucket_key, row["token"] or "")
-
-            # rows 已按 fetch_time DESC，首次命中即最新值
-            if dedup_key in latest_per_bucket_token:
+            if row["today_date"] != bucket_date:
                 continue
-            latest_per_bucket_token[dedup_key] = {
-                "fetch_time": bucket_key,
-                "today_date": row["today_date"],
-                "today_pv": row["today_pv"] or 0,
-                "today_upvote": row["today_upvote"] or 0,
-                "today_collect": row["today_collect"] or 0,
-                "today_share": row["today_share"] or 0,
-                "today_show": row["today_show"] or 0,
-            }
+            last_seen_by_token[row["token"]] = row
 
-        bucketed: dict[str, dict[str, Any]] = {}
-        for row in latest_per_bucket_token.values():
-            bucket_key = row["fetch_time"]
-            if bucket_key not in bucketed:
-                bucketed[bucket_key] = {
-                    "fetch_time": bucket_key,
-                    "today_date": row["today_date"],
-                    "today_pv": 0,
-                    "today_upvote": 0,
-                    "today_collect": 0,
-                    "today_share": 0,
-                    "today_show": 0,
-                }
-            bucketed[bucket_key]["today_pv"] += row["today_pv"]
-            bucketed[bucket_key]["today_upvote"] += row["today_upvote"]
-            bucketed[bucket_key]["today_collect"] += row["today_collect"]
-            bucketed[bucket_key]["today_share"] += row["today_share"]
-            bucketed[bucket_key]["today_show"] += row["today_show"]
+        aggregated = {
+            "fetch_time": bucket_key,
+            "today_date": bucket_date,
+            "today_pv": 0,
+            "today_upvote": 0,
+            "today_collect": 0,
+            "today_share": 0,
+            "today_show": 0,
+        }
+        for row in last_seen_by_token.values():
+            aggregated["today_pv"] += row["today_pv"]
+            aggregated["today_upvote"] += row["today_upvote"]
+            aggregated["today_collect"] += row["today_collect"]
+            aggregated["today_share"] += row["today_share"]
+            aggregated["today_show"] += row["today_show"]
 
-        result = sorted(bucketed.values(), key=lambda item: item["fetch_time"])
-        if len(result) > limit:
-            result = result[-limit:]
-        return result
+        if result and result[-1]["today_date"] == bucket_date:
+            previous = result[-1]
+            aggregated["today_pv"] = max(aggregated["today_pv"], previous["today_pv"])
+            aggregated["today_upvote"] = max(aggregated["today_upvote"], previous["today_upvote"])
+            aggregated["today_collect"] = max(aggregated["today_collect"], previous["today_collect"])
+            aggregated["today_share"] = max(aggregated["today_share"], previous["today_share"])
+            aggregated["today_show"] = max(aggregated["today_show"], previous["today_show"])
+
+        result.append(aggregated)
+
+    if len(result) > limit:
+        result = result[-limit:]
+    return result

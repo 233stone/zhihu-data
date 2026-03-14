@@ -138,7 +138,8 @@ def fetch_and_store_article_stats(
 ) -> bool:
     """抓取单篇文章数据并入库"""
     try:
-        print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 正在抓取: {title}")
+        fetch_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        print(f"[{fetch_time}] 正在抓取: {title}")
         response = _request_article_aggr(token, config, timeout=15)
 
         if response.status_code != 200:
@@ -147,11 +148,12 @@ def fetch_and_store_article_stats(
 
         data = response.json()
         today = data.get("today") or {}
-        advanced = today.get("advanced") or {}
+        today_advanced = today.get("advanced") or {}
+        total_advanced = data.get("advanced") or {}
 
         repos.insert_article_stats(
             {
-                "fetch_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "fetch_time": fetch_time,
                 "token": token,
                 "title": title,
                 "today_date": today.get("p_date", ""),
@@ -163,17 +165,35 @@ def fetch_and_store_article_stats(
                 "today_share": today.get("share", 0),
                 "today_incr_upvote": today.get("incr_upvote_num") or 0,
                 "today_desc_upvote": today.get("desc_upvote_num") or 0,
-                "finish_read_percent": advanced.get("finish_read_percent", ""),
-                "positive_interact_percent": advanced.get(
+                "finish_read_percent": today_advanced.get("finish_read_percent", ""),
+                "positive_interact_percent": today_advanced.get(
                     "positive_interact_percent", ""
                 ),
-                "follower_translate": advanced.get("follower_translate", 0),
+                "follower_translate": today_advanced.get("follower_translate", 0),
+            }
+        )
+        repos.insert_article_total_stats(
+            {
+                "fetch_time": fetch_time,
+                "token": token,
+                "title": title,
+                "total_pv": data.get("pv", 0),
+                "total_show": data.get("show", 0),
+                "total_upvote": data.get("upvote", 0),
+                "total_comment": data.get("comment", 0),
+                "total_collect": data.get("collect", 0),
+                "total_share": data.get("share", 0),
+                "finish_read_percent": total_advanced.get("finish_read_percent", ""),
+                "positive_interact_percent": total_advanced.get(
+                    "positive_interact_percent", ""
+                ),
+                "follower_translate": total_advanced.get("follower_translate", 0),
             }
         )
 
         print(
             f"  -> 入库成功 | {today.get('p_date', '')}: "
-            f"阅读={today.get('pv', 0)}, 赞同={today.get('upvote', 0)}, 收藏={today.get('collect', 0)}"
+            f"今日阅读={today.get('pv', 0)}, 总阅读={data.get('pv', 0)}, 总赞同={data.get('upvote', 0)}"
         )
         return True
     except Exception as e:
@@ -227,8 +247,12 @@ def append_click_rate(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for row in rows:
         item = dict(row)
-        pv = item.get("today_pv") or 0
-        show = item.get("today_show") or 0
+        pv = item.get("total_pv")
+        show = item.get("total_show")
+        if pv is None:
+            pv = item.get("today_pv") or 0
+        if show is None:
+            show = item.get("today_show") or 0
         item["click_rate"] = f"{(pv / show * 100):.2f}%" if show > 0 else "0%"
         result.append(item)
     return result

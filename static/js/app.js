@@ -35,6 +35,7 @@ function toggleSidebar() {
 
 // ---------------- 全局变量 ----------------
 let currentDays = 1;
+let currentTimeFilter = 'today';
 let currentMetric = 'pv';
 let currentArticleToken = '';  // 空字符串 = 总览
 let chartInstance = null;
@@ -63,17 +64,43 @@ function getLocalDateStr(dateObj = new Date()) {
     return `${y}-${m}-${d}`;
 }
 
-function setTimeFilterState(days) {
+function shiftDate(baseDate, deltaDays) {
+    const shifted = new Date(baseDate);
+    shifted.setDate(shifted.getDate() + deltaDays);
+    return shifted;
+}
+
+function getSelectedSingleDayDate() {
+    if (currentTimeFilter === 'yesterday') {
+        return getLocalDateStr(shiftDate(new Date(), -1));
+    }
+    return getLocalDateStr();
+}
+
+function getTrendRequestDays() {
+    if (currentTimeFilter === 'yesterday') return 2;
+    if (currentTimeFilter === 'today') return 1;
+    return currentDays;
+}
+
+function getSummaryDate() {
+    return currentTimeFilter === 'yesterday' ? getSelectedSingleDayDate() : getLocalDateStr();
+}
+
+function setTimeFilterState(filterKey, days) {
     const targetBtn = Array.from(document.querySelectorAll('.time-filter-btn'))
-        .find(btn => Number(btn.getAttribute('data-days')) === Number(days));
+        .find(btn =>
+            btn.getAttribute('data-filter') === filterKey &&
+            Number(btn.getAttribute('data-days')) === Number(days)
+        );
     if (!targetBtn) return;
     document.querySelectorAll('.time-filter-btn').forEach(btn => btn.classList.remove('active'));
     targetBtn.classList.add('active');
+    currentTimeFilter = filterKey;
     currentDays = Number(days);
     document.getElementById('chart-title-days').innerText = targetBtn.getAttribute('data-label') || '';
 }
 
-// ---------------- 二级文章导航（独立侧边栏） ----------------
 async function loadArticleSubNav() {
     try {
         const res = await fetch('/api/articles');
@@ -125,7 +152,7 @@ function switchArticle(token, elem) {
     if (token) {
         titleEl.innerText = elem.title || elem.innerText;
         // 切换到单篇时，默认展示今天
-        setTimeFilterState(1);
+        setTimeFilterState('today', 1);
     } else {
         titleEl.innerText = '整体数据总览';
     }
@@ -156,8 +183,8 @@ async function goToArticleData(token) {
 }
 
 // ---------------- [模块1] 数据看板 ----------------
-function filterTime(btnElem, days) {
-    setTimeFilterState(days);
+function filterTime(btnElem, filterKey, days) {
+    setTimeFilterState(filterKey, days);
     loadDashboard();
 }
 
@@ -170,7 +197,7 @@ function switchChartMetric(metric, btnElem) {
 
 async function loadDashboard() {
     try {
-        const dateStr = getLocalDateStr();
+        const dateStr = getSummaryDate();
         const tokenParam = currentArticleToken ? `&token=${currentArticleToken}` : '';
 
         // 获取总览/单篇文章的汇总数据
@@ -188,7 +215,7 @@ async function loadDashboard() {
 
         // 获取趋势数据（带 token 筛选）
         const trendTokenParam = currentArticleToken ? `&token=${currentArticleToken}` : '';
-        const trendRes = await fetch(`/api/stats/trend?days=${currentDays}${trendTokenParam}`);
+        const trendRes = await fetch(`/api/stats/trend?days=${getTrendRequestDays()}${trendTokenParam}`);
         window.trendDataRaw = await trendRes.json();
 
         renderChart();
@@ -203,20 +230,20 @@ function renderChart() {
     let labels = [];
     let dataPoints = [];
 
-    if (currentDays === 1) {
-        // 「今天」模式：展示日内每次抓取的时间序列，X 轴为 HH:mm
-        const todayStr = getLocalDateStr();
-        const todayData = window.trendDataRaw.filter(item => {
-            // fetch_time 格式为 "YYYY-MM-DD HH:MM:SS"
-            return item.fetch_time && item.fetch_time.startsWith(todayStr);
+    if (currentTimeFilter === 'today' || currentTimeFilter === 'yesterday') {
+        // Single-day mode: show intraday points with HH:mm on the X axis.
+        const targetDate = getSelectedSingleDayDate();
+        const singleDayData = window.trendDataRaw.filter(item => {
+            // fetch_time format: "YYYY-MM-DD HH:MM:SS"
+            return item.fetch_time && item.fetch_time.startsWith(targetDate);
         });
 
-        labels = todayData.map(item => {
-            // 提取 HH:mm
+        labels = singleDayData.map(item => {
+            // Extract HH:mm.
             const timePart = item.fetch_time.split(' ')[1] || '';
             return timePart.substring(0, 5);
         });
-        dataPoints = todayData.map(item => {
+        dataPoints = singleDayData.map(item => {
             if (currentMetric === 'pv') return item.today_pv;
             if (currentMetric === 'upvote') return item.today_upvote;
             if (currentMetric === 'collect') return item.today_collect;
@@ -301,12 +328,13 @@ function renderTable() {
                     <div class="article-title-cell" title="${row.title}"><a href="https://www.zhihu.com/answer/${row.token}" target="_blank" style="color:inherit;text-decoration:none;" onmouseover="this.style.color='var(--primary-color)'" onmouseout="this.style.color='inherit'">${row.title}</a></div>
                     <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">ID: ${row.token}</div>
                 </td>
-                <td>${(row.today_show || 0).toLocaleString()}</td>
-                <td>${(row.today_pv || 0).toLocaleString()}</td>
+                <td>${(row.total_show || 0).toLocaleString()}</td>
+                <td>${(row.total_pv || 0).toLocaleString()}</td>
                 <td><span style="color:var(--primary-color)">${row.click_rate}</span></td>
                 <td>${row.finish_read_percent || '0%'}</td>
-                <td>${(row.today_upvote || 0).toLocaleString()}</td>
-                <td>${(row.today_collect || 0).toLocaleString()}</td>
+                <td>${row.positive_interact_percent || '0%'}</td>
+                <td>${(row.total_upvote || 0).toLocaleString()}</td>
+                <td>${(row.total_collect || 0).toLocaleString()}</td>
                 <td>
                     <div class="row-actions">
                         <button class="btn btn-secondary" onclick="goToArticleData('${row.token}')">数据</button>
@@ -339,7 +367,7 @@ function sortTable(col) {
         let valB = b[col] || 0;
 
         // 特殊处理带%的百分比
-        if (col === 'click_rate' || col === 'finish_read_percent') {
+        if (col === 'click_rate' || col === 'finish_read_percent' || col === 'positive_interact_percent') {
             valA = parsePercent(valA);
             valB = parsePercent(valB);
         }

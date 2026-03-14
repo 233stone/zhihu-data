@@ -1,5 +1,6 @@
 zhihu_data.db
 app/__pycache__
 .idea/
-请求响应/
+ref/
 config.json
+__pycache__/

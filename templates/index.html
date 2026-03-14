@@ -55,13 +55,15 @@
 
             <!-- 时间筛选 -->
             <div class="time-filters">
-                <button class="time-filter-btn active" data-days="1" data-label="今天"
-                    onclick="filterTime(this, 1)">今天</button>
-                <button class="time-filter-btn" data-days="7" data-label="最近7天" onclick="filterTime(this, 7)">最近
+                <button class="time-filter-btn active" data-filter="today" data-days="1" data-label="今天"
+                    onclick="filterTime(this, 'today', 1)">今天</button>
+                <button class="time-filter-btn" data-filter="yesterday" data-days="2" data-label="昨天"
+                    onclick="filterTime(this, 'yesterday', 2)">昨天</button>
+                <button class="time-filter-btn" data-filter="days" data-days="7" data-label="最近7天" onclick="filterTime(this, 'days', 7)">最近
                     7 天</button>
-                <button class="time-filter-btn" data-days="14" data-label="最近14天" onclick="filterTime(this, 14)">最近 14
+                <button class="time-filter-btn" data-filter="days" data-days="14" data-label="最近14天" onclick="filterTime(this, 'days', 14)">最近 14
                     天</button>
-                <button class="time-filter-btn" data-days="30" data-label="最近30天" onclick="filterTime(this, 30)">最近 30
+                <button class="time-filter-btn" data-filter="days" data-days="30" data-label="最近30天" onclick="filterTime(this, 'days', 30)">最近 30
                     天</button>
             </div>
 
@@ -139,12 +141,13 @@
                     <thead>
                         <tr>
                             <th>文章信息</th>
-                            <th onclick="sortTable('today_show')" data-sort="today_show">展现量</th>
-                            <th onclick="sortTable('today_pv')" data-sort="today_pv">阅读量</th>
-                            <th onclick="sortTable('click_rate')" data-sort="click_rate">点击率</th>
-                            <th onclick="sortTable('finish_read_percent')" data-sort="finish_read_percent">完读率</th>
-                            <th onclick="sortTable('today_upvote')" data-sort="today_upvote">点赞量</th>
-                            <th onclick="sortTable('today_collect')" data-sort="today_collect">收藏量</th>
+                            <th onclick="sortTable('total_show')" data-sort="total_show">总展现量</th>
+                            <th onclick="sortTable('total_pv')" data-sort="total_pv">总阅读量</th>
+                            <th onclick="sortTable('click_rate')" data-sort="click_rate">总点击率</th>
+                            <th onclick="sortTable('finish_read_percent')" data-sort="finish_read_percent">总完读率</th>
+                            <th onclick="sortTable('positive_interact_percent')" data-sort="positive_interact_percent">总正向互动率</th>
+                            <th onclick="sortTable('total_upvote')" data-sort="total_upvote">总点赞量</th>
+                            <th onclick="sortTable('total_collect')" data-sort="total_collect">总收藏量</th>
                             <th>操作</th>
                         </tr>
                     </thead>
