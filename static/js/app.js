@@ -326,13 +326,19 @@ function renderTable() {
         tr.innerHTML = `
                 <td>
                     <div class="article-title-cell" title="${row.title}"><a href="https://www.zhihu.com/answer/${row.token}" target="_blank" style="color:inherit;text-decoration:none;" onmouseover="this.style.color='var(--primary-color)'" onmouseout="this.style.color='inherit'">${row.title}</a></div>
-                    <div style="font-size:12px;color:var(--text-muted);margin-top:4px;">ID: ${row.token}</div>
+                    <div style="font-size:12px;color:var(--text-muted);margin-top:4px;display:flex;align-items:center;">
+                        ID: ${row.token}
+                        <button class="btn btn-secondary" style="padding: 4px; border: 1px solid transparent; background: transparent; color: var(--text-muted); margin-left: 6px; border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer;" onmouseover="this.style.color='var(--primary-color)';" onmouseout="this.style.color='var(--text-muted)';" onclick="copyArticleLinkToClipboard('https://www.zhihu.com/answer/${row.token}', this)" title="复制链接">
+                            <svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                        </button>
+                    </div>
                 </td>
                 <td>${(row.total_show || 0).toLocaleString()}</td>
                 <td>${(row.total_pv || 0).toLocaleString()}</td>
                 <td><span style="color:var(--primary-color)">${row.click_rate}</span></td>
                 <td>${row.finish_read_percent || '0%'}</td>
                 <td>${row.positive_interact_percent || '0%'}</td>
+                <td><span style="color:var(--success-color); font-weight:500;">${row.exposure_interact_rate || '0.000%'}</span></td>
                 <td>${(row.total_upvote || 0).toLocaleString()}</td>
                 <td>${(row.total_collect || 0).toLocaleString()}</td>
                 <td>
@@ -367,7 +373,7 @@ function sortTable(col) {
         let valB = b[col] || 0;
 
         // 特殊处理带%的百分比
-        if (col === 'click_rate' || col === 'finish_read_percent' || col === 'positive_interact_percent') {
+        if (col === 'click_rate' || col === 'finish_read_percent' || col === 'positive_interact_percent' || col === 'exposure_interact_rate') {
             valA = parsePercent(valA);
             valB = parsePercent(valB);
         }
@@ -468,5 +474,37 @@ async function saveConfig() {
         console.error(e);
         resultEl.innerText = '配置保存失败，请检查网络后重试。';
         resultEl.style.color = '#f1403c';
+    }
+}
+
+// ---------------- [模块4] 辅助功能 ----------------
+function copyArticleLinkToClipboard(url, btnElem) {
+    const copyIcon = `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
+    const checkIcon = `<svg viewBox="0 0 24 24" width="13" height="13" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
+    
+    const setCopied = () => {
+        btnElem.innerHTML = checkIcon;
+        btnElem.style.color = 'var(--success-color)';
+        setTimeout(() => {
+            btnElem.innerHTML = copyIcon;
+            btnElem.style.color = 'var(--text-muted)';
+        }, 2000);
+    };
+
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(url).then(setCopied).catch(err => console.error('复制失败', err));
+    } else {
+        // Fallback
+        const input = document.createElement('input');
+        input.value = url;
+        document.body.appendChild(input);
+        input.select();
+        try {
+            document.execCommand('copy');
+            setCopied();
+        } catch (err) {
+            console.error('复制失败', err);
+        }
+        document.body.removeChild(input);
     }
 }

@@ -253,7 +253,21 @@ def append_click_rate(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             pv = item.get("today_pv") or 0
         if show is None:
             show = item.get("today_show") or 0
-        item["click_rate"] = f"{(pv / show * 100):.2f}%" if show > 0 else "0%"
+        
+        click_rate_val = (pv / show) if show > 0 else 0
+        item["click_rate"] = f"{(click_rate_val * 100):.2f}%"
+        
+        # 解析正向互动率并计算曝光互动率 (点击率 * 正向互动率)
+        pos_str = item.get("positive_interact_percent") or "0%"
+        try:
+            pos_val = float(pos_str.replace("%", "")) / 100.0
+        except ValueError:
+            pos_val = 0.0
+            
+        exposure_interact_val = click_rate_val * pos_val
+        # 保留3位小数，因为基数是曝光，数值通常比较小
+        item["exposure_interact_rate"] = f"{(exposure_interact_val * 100):.3f}%"
+        
         result.append(item)
     return result
 
