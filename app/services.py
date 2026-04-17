@@ -172,11 +172,10 @@ def fetch_and_store_article_stats(
                 "follower_translate": today_advanced.get("follower_translate", 0),
             }
         )
-        repos.insert_article_total_stats(
+        repos.upsert_article_total_stats(
             {
                 "fetch_time": fetch_time,
                 "token": token,
-                "title": title,
                 "total_pv": data.get("pv", 0),
                 "total_show": data.get("show", 0),
                 "total_upvote": data.get("upvote", 0),
@@ -332,6 +331,8 @@ class SchedulerRunner:
                         is_last = index == len(articles) - 1
                         if not is_last and not self._wait_seconds(delay):
                             return
+
+                repos.cleanup_expired_stats()
 
                 print(f"等待 {interval} 分钟...\n")
                 if not self._wait_seconds(interval * 60):

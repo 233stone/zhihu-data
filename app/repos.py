@@ -61,10 +61,8 @@ def init_db() -> None:
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS article_total_stats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            token TEXT PRIMARY KEY,
             fetch_time DATETIME,
-            token TEXT,
-            title TEXT,
             total_pv INTEGER,
             total_show INTEGER,
             total_upvote INTEGER,
@@ -106,6 +104,62 @@ def init_db() -> None:
 
     conn.commit()
     conn.close()
+
+
+def migrate_total_stats_table() -> None:
+    """将旧的 article_total_stats（自增id追加模式）迁移为 token 主键覆盖模式"""
+    conn = get_db_connection()
+    columns = conn.execute("PRAGMA table_info(article_total_stats)").fetchall()
+    column_names = [col["name"] for col in columns]
+
+    # 如果表中没有 'id' 列，说明已经迁移过或是新建的表，跳过
+    if "id" not in column_names:
+        conn.close()
+        return
+
+    print("[迁移] 检测到旧的 article_total_stats 表结构，正在迁移...")
+    try:
+        conn.execute(
+            """
+            CREATE TABLE article_total_stats_new (
+                token TEXT PRIMARY KEY,
+                fetch_time DATETIME,
+                total_pv INTEGER,
+                total_show INTEGER,
+                total_upvote INTEGER,
+                total_comment INTEGER,
+                total_collect INTEGER,
+                total_share INTEGER,
+                finish_read_percent TEXT,
+                positive_interact_percent TEXT,
+                follower_translate INTEGER
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO article_total_stats_new
+            SELECT t.token, t.fetch_time,
+                   t.total_pv, t.total_show, t.total_upvote, t.total_comment,
+                   t.total_collect, t.total_share,
+                   t.finish_read_percent, t.positive_interact_percent, t.follower_translate
+            FROM article_total_stats t
+            INNER JOIN (
+                SELECT token, MAX(fetch_time) AS max_time
+                FROM article_total_stats
+                GROUP BY token
+            ) latest ON t.token = latest.token AND t.fetch_time = latest.max_time
+            """
+        )
+        conn.execute("DROP TABLE article_total_stats")
+        conn.execute("ALTER TABLE article_total_stats_new RENAME TO article_total_stats")
+        conn.commit()
+        print("[迁移] article_total_stats 迁移完成")
+    except Exception as e:
+        conn.rollback()
+        print(f"[迁移] article_total_stats 迁移失败: {e}")
+    finally:
+        conn.close()
 
 
 def migrate_from_config_json(config_path: str = "") -> None:
@@ -207,58 +261,18 @@ def list_articles_with_latest_stats() -> list[dict[str, Any]]:
     conn = get_db_connection()
     rows = conn.execute(
         """
-        WITH latest_daily_stats AS (
-            SELECT st.* FROM article_stats st
-            INNER JOIN (
-                SELECT token, MAX(fetch_time) as max_time
-                FROM article_stats
-                GROUP BY token
-            ) latest ON st.token = latest.token AND st.fetch_time = latest.max_time
-        ),
-        latest_total_stats AS (
-            SELECT st.* FROM article_total_stats st
-            INNER JOIN (
-                SELECT token, MAX(fetch_time) as max_time
-                FROM article_total_stats
-                GROUP BY token
-            ) latest ON st.token = latest.token AND st.fetch_time = latest.max_time
-        ),
-        latest_daily_per_date AS (
-            SELECT st.* FROM article_stats st
-            INNER JOIN (
-                SELECT token, today_date, MAX(fetch_time) as max_time
-                FROM article_stats
-                WHERE today_date <> ''
-                GROUP BY token, today_date
-            ) latest ON st.token = latest.token
-                AND st.today_date = latest.today_date
-                AND st.fetch_time = latest.max_time
-        ),
-        fallback_total_stats AS (
-            SELECT token,
-                   SUM(today_pv) AS total_pv,
-                   SUM(today_show) AS total_show,
-                   SUM(today_upvote) AS total_upvote,
-                   SUM(today_comment) AS total_comment,
-                   SUM(today_collect) AS total_collect,
-                   SUM(today_share) AS total_share
-            FROM latest_daily_per_date
-            GROUP BY token
-        )
         SELECT a.token, a.title,
-               COALESCE(t.total_pv, f.total_pv, d.today_pv, 0) AS total_pv,
-               COALESCE(t.total_show, f.total_show, d.today_show, 0) AS total_show,
-               COALESCE(t.total_upvote, f.total_upvote, d.today_upvote, 0) AS total_upvote,
-               COALESCE(t.total_comment, f.total_comment, d.today_comment, 0) AS total_comment,
-               COALESCE(t.total_collect, f.total_collect, d.today_collect, 0) AS total_collect,
-               COALESCE(t.total_share, f.total_share, d.today_share, 0) AS total_share,
-               COALESCE(t.finish_read_percent, d.finish_read_percent, '') AS finish_read_percent,
-               COALESCE(t.positive_interact_percent, d.positive_interact_percent, '') AS positive_interact_percent,
-               COALESCE(t.fetch_time, d.fetch_time) AS fetch_time
+               COALESCE(t.total_pv, 0) AS total_pv,
+               COALESCE(t.total_show, 0) AS total_show,
+               COALESCE(t.total_upvote, 0) AS total_upvote,
+               COALESCE(t.total_comment, 0) AS total_comment,
+               COALESCE(t.total_collect, 0) AS total_collect,
+               COALESCE(t.total_share, 0) AS total_share,
+               COALESCE(t.finish_read_percent, '') AS finish_read_percent,
+               COALESCE(t.positive_interact_percent, '') AS positive_interact_percent,
+               COALESCE(t.fetch_time, '') AS fetch_time
         FROM articles a
-        LEFT JOIN latest_daily_stats d ON a.token = d.token
-        LEFT JOIN latest_total_stats t ON a.token = t.token
-        LEFT JOIN fallback_total_stats f ON a.token = f.token
+        LEFT JOIN article_total_stats t ON a.token = t.token
         ORDER BY a.created_at DESC
         """
     ).fetchall()
@@ -298,20 +312,19 @@ def insert_article_stats(record: dict[str, Any]) -> None:
     conn.close()
 
 
-def insert_article_total_stats(record: dict[str, Any]) -> None:
+def upsert_article_total_stats(record: dict[str, Any]) -> None:
     conn = get_db_connection()
     conn.execute(
         """
-        INSERT INTO article_total_stats (
-            fetch_time, token, title,
+        INSERT OR REPLACE INTO article_total_stats (
+            token, fetch_time,
             total_pv, total_show, total_upvote, total_comment, total_collect, total_share,
             finish_read_percent, positive_interact_percent, follower_translate
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            record.get("fetch_time"),
             record.get("token"),
-            record.get("title"),
+            record.get("fetch_time"),
             record.get("total_pv"),
             record.get("total_show"),
             record.get("total_upvote"),
@@ -325,6 +338,20 @@ def insert_article_total_stats(record: dict[str, Any]) -> None:
     )
     conn.commit()
     conn.close()
+
+
+def cleanup_expired_stats(keep_days: int = 30) -> None:
+    """清理超过指定天数的 article_stats 历史记录"""
+    conn = get_db_connection()
+    result = conn.execute(
+        "DELETE FROM article_stats WHERE fetch_time < datetime('now', ? || ' days')",
+        (f"-{keep_days}",),
+    )
+    conn.commit()
+    deleted_count = result.rowcount
+    conn.close()
+    if deleted_count > 0:
+        print(f"[清理] 已删除 {deleted_count} 条超过 {keep_days} 天的历史记录")
 
 
 def get_latest_stats_rows() -> list[dict[str, Any]]:

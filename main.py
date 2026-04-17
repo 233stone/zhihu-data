@@ -144,6 +144,7 @@ def main() -> None:
     print("=============================================\n")
 
     repos.init_db()
+    repos.migrate_total_stats_table()
     repos.migrate_from_config_json()
 
     scheduler = services.SchedulerRunner()
